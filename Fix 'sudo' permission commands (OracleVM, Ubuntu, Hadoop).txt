@@ -1,0 +1,5 @@
+# To help with permission issues for commands that require sudo to run.
+>>sudo groupadd docker
+>>sudo usermod -aG docker $(whoami)
+>>sudo systemctl restart docker
+>>newgrp docker

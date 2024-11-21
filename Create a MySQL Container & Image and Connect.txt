@@ -1,0 +1,51 @@
+# Create a MySQL container and Connect to the myNetwork
+
+***********************************************************
+docker run -d --name mysql-container1 \
+  -e MYSQL_ROOT_PASSWORD=root_password \
+  -e MYSQL_DATABASE=my_database \
+  -e MYSQL_USER=my_user \
+  -e MYSQL_PASSWORD=my_password \
+  -p 3306:3306 \
+  --network myNetwork \
+  -v mysql_data:/var/lib/mysql \
+  mysql:latest
+**************************************************************
+
+
+# Explanation
+# -e MYSQL_ROOT_PASSWORD: Sets the root password for MySQL.
+# -e MYSQL_DATABASE: Automatically creates a database named my_database.
+# -e MYSQL_USER and -e MYSQL_PASSWORD: Adds a user with the specified password.
+# -p 3306:3306: Maps the MySQL default port to the host machine.
+# --network myNetwork: Connects the container to the existing Docker network.
+# -v mysql_data:/var/lib/mysql: Persists MySQL data using a named Docker volume.
+
+**************************************************************************
+# Confirm container is running
+
+$ docker ps
+*******************************************************
+
+# Access MySQL Container
+$ docker exec -it mysql-container1 mysql -u root -p
+
+# Will Prompt for a password p/w = (root_password)
+********************************************************
+-- Switch to the database
+USE my_database;
+
+-- Create a sample table and Insert data
+CREATE TABLE team_mate (
+    ID INT AUTO_INCREMENT PRIMARY KEY,
+    FIRST_NAME VARCHAR(10) NOT NULL,
+    EMAIL VARCHAR(50),
+    CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
+INSERT INTO(FIRST_NAME,EMAIL) VALUES('David','davidonyqngo193@gmail.com);
+
+SELECT my_database;
+
+
