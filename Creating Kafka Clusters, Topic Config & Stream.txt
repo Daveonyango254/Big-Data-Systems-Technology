@@ -1,0 +1,192 @@
+#6#******Introduction: ***********************************************************************************************
+
+In this lab we create a 3 node Kafka cluster that streams a topic to a text file on a shared docker volume.  
+This document has sequential instructions to be followed, commands to be run typically start with >>, 
+some commands start with a “.” Make sure you include the “.” symbol in those commands.
+
+***********************************************************************************************************************
+
+####****1.Create 1st Kafka Container: *********************************************************************************
+
+	>>docker run -d --name kafka-container1 -e 
+	KAFKA_BROKER_ID=1 -e 
+	KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka-container1:9092 -e 
+	KAFKA_LOG_DIRS=/var/lib/kafka/data1 -e 
+	KAFKA_PROCESS_ROLES=broker,controller -e 
+	KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka-container1:9093,2@kafka-container2:9093,3@kafka-container3:9093 -e 
+	KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT -e 
+	KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER -e 
+	KAFKA_LISTENERS=PLAINTEXT://kafka-container1:9092,CONTROLLER://kafka-container1:9093 -p 9092:9092 -p 9093:9093 --network myNetwork -v my_shared_volume:/shared_data:rw   apache/kafka:latest
+
+####****1.Create 2nd Kafka Container: ***********************************************************************************
+
+	>>docker run -d --name kafka-container2 -e 
+	KAFKA_BROKER_ID=2 -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka-container2:9092 -e 
+	KAFKA_LOG_DIRS=/var/lib/kafka/data2 -e KAFKA_PROCESS_ROLES=broker,controller -e 
+	KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka-container1:9093,2@kafka-container2:9093,3@kafka-container3:9093 -e 
+	KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT -e 
+	KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER -e 
+	KAFKA_LISTENERS=PLAINTEXT://kafka-container2:9092,CONTROLLER://kafka-container2:9093 -p 9094:9092 -p 9095:9093 --network myNetwork -v my_shared_volume:/shared_data:rw  apache/kafka:latest
+
+####****1.Create 3rd Kafka Container: ************************************************************************************
+
+
+	>>docker run -d --name kafka-container3 -e 
+	KAFKA_BROKER_ID=3 -e 
+	KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka-container3:9092 -e 
+	KAFKA_LOG_DIRS=/var/lib/kafka/data3 -e 
+	KAFKA_PROCESS_ROLES=broker,controller -e 
+	KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka-container1:9093,2@kafka-container2:9093,3@kafka-container3:9093 -e 
+	KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT -e 
+	KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER -e 
+	KAFKA_LISTENERS=PLAINTEXT://kafka-container3:9092,CONTROLLER://kafka-container3:9093 -p 9096:9092 -p 9097:9093 --network myNetwork -v my_shared_volume:/shared_data:rw  apache/kafka:latest
+
+***************************************************************************************************************************
+
+####****Verify that all 3 are running by running a $ docker ps, if not, run 
+
+		>>docker restart (container that’s not running) 
+*****************************************************************************************************************************
+
+####****Create necessary kafka config topics*********************************************************************************
+
+	>>docker exec -it kafka-container1 /bin/bash
+	>>cd opt/kafka/bin
+	>>./kafka-topics.sh --create --topic my-connect-configs --bootstrap-server kafka-container1:9092 --partitions 1 --replication-factor 3 --config cleanup.policy=compact
+
+	>>./kafka-topics.sh --create --topic my-connect-offsets --bootstrap-server kafka-container1:9092 --partitions 25 --replication-factor 3 --config cleanup.policy=compact
+
+	>>./kafka-topics.sh --create --topic my-connect-status --bootstrap-server kafka-container1:9092 --partitions 5 --replication-factor 3 --config cleanup.policy=compact
+
+	#********Exit the kakfa-container1 terminal to return to the host machine**********
+		>>exit
+********************************************************************************************************************************
+
+####******Create Connect Container**********************************************************************************************
+
+	>>docker run -d --name connect --network myNetwork   -v 
+	my_shared_volume:/shared_data:rw   -p 8083:8083   -e 
+	CONNECT_BOOTSTRAP_SERVERS=kafka-container1:9092,kafka-container2:9092,kafka-container3:9092   -e 
+	CONNECT_GROUP_ID=1   -e 
+	CONNECT_CONFIG_STORAGE_TOPIC=my-connect-configs   -e 
+	CONNECT_OFFSET_STORAGE_TOPIC=my-connect-offsets   -e 
+	CONNECT_STATUS_STORAGE_TOPIC=my-connect-status   -e 
+	CONNECT_KEY_CONVERTER=org.apache.kafka.connect.storage.StringConverter   -e 
+	CONNECT_VALUE_CONVERTER=org.apache.kafka.connect.storage.StringConverter   -e 
+	CONNECT_REST_ADVERTISED_HOST_NAME=connect   -e CONNECT_PLUGIN_PATH=/usr/share/kafka/plugins,/usr/share/filestream-connectors   confluentinc/cp-kafka-connect:latest
+************************************************************************************************************************************
+
+
+####***Verify all 4 containers are running, and then check the ‘connect’ container logs that the service is running (generally should see no errors, possibly a “Session key updated” message etc.**************************
+
+	>>docker ps
+	>>docker logs -f connect
+	>>CTL+C (to exit the log file)
+**************************************************************************************************************************************
+
+
+####***Configure the Connector to stream topic contents to file***********************************************************************
+
+	>> docker exec -it -u 0 connect bash -c "mkdir -p /shared_data/output && touch /shared_data/output/file.txt && chmod 666 /shared_data/output/file.txt"
+
+	>> docker exec -it -u 0 connect bash -c "mkdir -p /usr/share/kafka/plugins /usr/share/filestream-connectors"
+
+	>> docker exec -it -u 0 connect bash -c "curl -o /usr/share/filestream-connectors/kafka-connect-file-2.5.0.jar https://repo.maven.apache.org/maven2/org/apache/kafka/kafka-connect-file/2.5.0/kafka-connect-file-2.5.0.jar"
+
+	>> docker restart connect
+****************************************************************************************************************************************
+
+
+####******Verify all 4 containers are running, and then check the ‘connect’ container logs that the service is running (generally should see no errors, possibly a “Finished starting connectors and tasks” message etc.
+
+	>>docker ps
+	>>docker logs -f connect
+	>>CTL+C (to exit the log file)
+******************************************************************************************************************************************
+
+
+####******Use this command to get the ip address of your connect container*****************************************************************
+
+	>>docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' connect
+
+####******Take this IP address and paste and replace it in the placeholder 'YOURIPADDRESSHERE' below***********
+
+	>> curl -X POST -H "Content-Type: application/json" -d '{
+  	  "name": "file-sink-connector",
+  	  "config": {
+    	    "connector.class": "org.apache.kafka.connect.file.FileStreamSinkConnector",
+    	    "tasks.max": "1",
+    	    "file": "/shared_data/output/file.txt",
+    	    "topics": "test-topic",
+    	    "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+    	    "value.converter": "org.apache.kafka.connect.storage.StringConverter",
+    	    "key.converter.schemas.enable": "false",
+    	    "value.converter.schemas.enable": "false"
+  	  }
+	}' http://YOURIPADDRESSHERE:8083/connectors
+*********************************************************************************************************************************************
+####***You should see no errors and should see something like “"name":"file-sink-connector"
+*********************************************************************************************************************************************
+
+####*****Create a Kafka Test Topic***********************************************************************************************************
+
+	>>docker exec -it kafka-container1 /bin/bash
+	>>cd opt/kafka/bin
+	>>./kafka-topics.sh --create --topic test-topic --bootstrap-server kafka-container1:9092 --replication-factor 3 
+
+   # Add messages to the Test Topic Using Container1
+
+	./kafka-console-producer.sh --bootstrap-server kafka-container1:9092 --topic test-topic
+
+   # Type in test messages 
+	>>Test Message 123
+	>>Another test message 456
+	>> CTL+D
+	>>CTL+D (to exit the messaging)
+	>>exit
+
+
+	>>docker restart connect
+
+    # Check for file changes streamed from the Kafka Topic
+
+	>> sudo cat /var/lib/docker/volumes/my_shared_volume/_data/output/file.txt
+
+    # Add More Messages
+	>>docker exec -it kafka-container1 /bin/bash
+	>>cd opt/kafka/bin
+	>>./kafka-console-producer.sh --bootstrap-server kafka-container1:9092 --topic test-topic
+	>>add more messages
+	>>CTL+D (to exit the messaging)
+
+	>>exit
+
+    # Check for file changes streamed from the Kafka Topic
+
+	# If Checking from host:…
+		>>sudo cat /var/lib/docker/volumes/my_shared_volume/_data/output/file.txt
+
+	# If Checking from a container:…
+		>>cat /shared_data/output/file.txt
+
+
+     # Add More Messages
+	>>docker exec -it kafka-container2 /bin/bash
+	>>cd opt/kafka/bin
+	>> ./kafka-topics.sh --bootstrap-server kafka-container2:9092 --list
+	>>./kafka-console-producer.sh --bootstrap-server kafka-container2:9092 --topic test-topic
+	>>Hello from container2!
+	>>CTL+D (to exit the messaging)
+
+	>>exit
+
+     # Check for file changes streamed from the Kafka Topic
+
+	>>docker exec -it connect cat /output/file.txt
+
+******************************************************************************************************************************************
+#####******N/B:
+You now should have a successful running 3 node node Kafka cluster!  This example streams to a file that you can read from your database.  
+It is possible to stream directly to a database table.
+******************************************************************************************************************************************
+

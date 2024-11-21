@@ -1,0 +1,37 @@
+#5#******Introduction: ***********************************************************************************************
+In this lab we create a python docker image, create a local file and copy it to Docker container.  
+After that you will create a Hadoop image, and process a large file.  
+
+Use this lab to explore, this is the time to get familiar with the commands, get used to working with Docker containers
+
+###******Some key tips: ********************************************************************************************** 
+
+• If you run into permissions issues in terminal try running the command with sudo in front or refer to the 'Fix 'sudo' permission command file'.
+• After you exit the Docker container after creating for the first time, you may need to start & attach
+		$ docker start python-container
+		$ docker attach python-container
+• If you want to execute a command inside the container without attaching it, you could run a command similar to below
+		$ docker exec -it python-container /bin/bash
+**********************************************************************************************************************
+
+####****1.Finding and Using a Docker Image with Python: **************************************************************
+
+		$ docker pull python:3.8-slim
+		$ docker run -it --name python-container python:3.8-slim
+		$ python --version
+
+####****2.Loading and Reading a File in Docker: **********************************************************************
+
+		$ echo "Hello, Big Data!" > sample.txt
+		$ docker cp sample.txt python-container:/sample.txt
+		$ docker exec -it python-container python -c "with open('/sample.txt', 'r') as file: print(file.read())"
+
+####****3.Processing a Large File with Hadoop: ************************************************************************	
+	
+		$ git clone https://github.com/big-data-europe/docker-hadoop.git
+		$ cd docker-hadoop
+		$ docker-compose up -d
+		$ docker cp largefile.txt namenode:/largefile.txt
+		$ docker exec -it namenode hdfs dfs -put /largefile.txt /user/hadoop/largefile.txt
+		$ docker exec -it namenode hadoop jar /opt/hadoop/share/hadoop/mapreduce/hadoop-mapreduce-examples-*.jar wordcount /user/hadoop/largefile.txt /user/hadoop/output
+
