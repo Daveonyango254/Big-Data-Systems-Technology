@@ -1,0 +1,132 @@
+#8#******Introduction: ********************************************************************************************************
+In this lab we will Process data using Spark / ML Lib with Python scripts in a Dockerized Spark environment.
+
+####** Objective
+This lab will guide you through setting up an Apache Spark environment using Docker and running a simple Spark MLlib example. By the end of this lab, you will be able to:
+•	Set up a Spark cluster using Docker.
+•	Run a Jupyter Notebook server to interact with Spark.
+•	Perform basic machine learning tasks using Spark MLlib.
+
+####** Overview
+   •	Set Up Docker Environment: 
+ 		Pull the necessary Docker images and run containers for Spark Master, Spark Worker, and 		Jupyter Notebook.
+   •	Access Jupyter Notebook: Connect to the Jupyter Notebook server to write and execute Spark MLlib   	code.
+   •	Write Spark MLlib Code: Create and run a notebook to perform machine learning tasks.
+   •	Clean Up: Stop and remove the Docker containers after completing the tasks.
+*******************************************************************************************************************************
+
+
+####*** Instructions***********************************************************************************************************
+####** Step 1: Pull the Spark Image
+First, pull the Spark image from Docker Hub:
+bash
+
+>>docker pull bitnami/spark:3.3.1
+
+
+####** Step 2: Start the Spark Master Container
+Run the Spark Master container with the specified parameters:
+
+>>docker run -d --name spark-container -p 8080:8080 -p 7077:7077 -v my_shared_volume:/shared_data:rw --network myNetwork bitnami/spark:3.3.1
+
+
+####** Step 3: Start the Spark Worker Container
+Run the Spark Worker container:
+
+>> docker run -d --name spark-worker --link spark-container:spark-master -p 8081:8081 -v my_shared_volume:/shared_data:rw --network myNetwork bitnami/spark:3.3.1 bash -c "/opt/bitnami/spark/sbin/start-slave.sh spark://spark-container:7077"
+
+
+####** Step 4: Start a Jupyter Notebook Container with PySpark
+Run the Jupyter Notebook container:
+
+>>docker run -d --name jupyter-pyspark -p 8888:8888 -v my_shared_volume:/shared_data:rw --network myNetwork jupyter/pyspark-notebook
+*********************************************************************************************************************************
+
+
+####** Step 5: Prepare the Sample Dataset
+Create and write the sample dataset into the shared_data directory:
+
+>>docker exec jupyter-pyspark bash -c "cat > /shared_data/dataset.csv <<EOL
+bedrooms,square_footage,age,price
+3,1500,20,300000
+4,2000,15,400000
+2,900,30,150000
+3,1800,10,350000
+4,2300,5,500000
+2,800,40,120000
+3,1600,20,320000
+EOL"
+
+      ## If you get ‘Permision denied’ issue trying solving it like this
+	####**Option1
+
+	>>docker stop spark-container
+	>>docker rm spark-container
+
+	>>docker run -d  -it --user root -v /my_shared_volume:/shared_data --name spark-container 	bitnami/spark:3.3.1
+
+	Then Re-Run step 5
+
+	####**Option 2
+	Re-run the step 5 this way:
+	>> docker exec --user root jupyter-pyspark bash -c "cat > /shared_data/dataset.csv <<EOL
+	   bedrooms,square_footage,age,price
+	   3,1500,20,300000
+	   4,2000,15,400000
+	   2,900,30,150000
+	   3,1800,10,350000
+	   4,2300,5,500000
+	   2,800,40,120000
+	   3,1600,20,320000
+	   EOL"
+*********************************************************************************************************************************
+
+####** Step 6: Access Jupyter Notebook
+## Run this command to get your jupyter-pyspark container’s ip address
+
+>>docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' jupyter-pyspark
+
+## Open your web browser and go to http://CONTAINERIPADDRESS:8888. You should see the Jupyter Notebook   interface. Use this to write and run your Spark MLlib code.
+
+ ##Your Jupyter notebook might ask you for a password /token. Run the following command to access the token
+
+		>> docker exec jupyter-pyspark jupyter server list
+
+ ## copy token (example token) and past into the login screen: 1d73ddfc5fc15e61ddce86e28a847abf0cf1746bc25e0aa7	
+*********************************************************************************************************************************
+ 
+####** Step 7: Write Spark MLlib Code
+	Now you can start writing your Spark MLlib code in the Jupyter Notebook. Here's a simple example to get you started:
+	1. Create a Jupyter Notebook and name it SparkMLLibExample.ipynb.
+	2. Write and Run the Code in the notebook:
+
+#**python*****************************************************************************************
+from pyspark.sql import SparkSession
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.regression import LinearRegression
+
+# Create Spark session
+spark = SparkSession.builder.appName("SparkMLLibExample").getOrCreate()
+
+# Load data
+data = spark.read.csv("/shared_data/dataset.csv", header=True, inferSchema=True)
+
+# Preprocess data
+assembler = VectorAssembler(inputCols=["bedrooms", "square_footage", "age"], outputCol="features")
+data = assembler.transform(data)
+
+# Define and fit the model
+lr = LinearRegression(featuresCol="features", labelCol="price")
+model = lr.fit(data)
+
+# Make predictions
+predictions = model.transform(data)
+predictions.select("bedrooms", "square_footage", "age", "price", "prediction").show()
+************************************************************************************************************************************
+
+####** Conclusion
+Congratulations! You have successfully:
+•	Set up a Spark environment using Docker.
+•	Configured and accessed a Jupyter Notebook server.
+•	Performed basic machine learning tasks using Spark MLlib.
+*************************************************************************************************************************************

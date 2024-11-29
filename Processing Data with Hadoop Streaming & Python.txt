@@ -1,0 +1,219 @@
+#7#******Introduction: **********************************************************************************************
+
+In this lab we will process data using Hadoop Streaming with Python scripts in a Dockerized Hadoop environment.
+Steps:
+•	Set up a Hadoop environment using Docker.
+•	Configure YARN resource allocations by creating and modifying the yarn-site.xml file using a sed command.
+•	Create and upload a sample text file to HDFS.
+•	Write Python scripts for the mapper and reducer (compatible with Python 2) using cat commands.
+•	Run a Hadoop Streaming job to perform word count.
+•	View and interpret the results.
+*********************************************************************************************************************
+
+####**Part 1: Set Up the Hadoop Environment**************************************************************************
+
+#####*** Step 1: Run the Hadoop Docker Container***
+#*** Start the Hadoop container with a shared volume and necessary ports exposed:
+>>docker run -d \
+  --name hadoop-container \
+  -v my_shared_volume:/shared_data:rw \
+  -p 8042:8042 \
+  -p 8088:8088 \
+  -p 19888:19888 \
+  -p 50070:50070 \
+  -p 50075:50075 \
+  --network myNetwork \
+  harisekhon/hadoop
+
+#Explanation:
+#•	-v my_shared_volume:/shared_data:rw: Mounts a shared Docker volume to /shared_data inside the container.
+#•	-p: Exposes necessary ports for Hadoop services.
+#•	--network myNetwork: Connects the container to your existing Docker network.
+
+####*** Step 2: Access the Hadoop Container
+>>docker exec -it hadoop-container /bin/bash
+*********************************************************************************************************************
+
+####** Part 2: Configure YARN Resource Allocation********************************************************************
+# To ensure your Hadoop jobs have sufficient resources, you'll create and modify the yarn-site.xml file using the provided sed command.
+*********************************************************************************************************************
+
+####** Step 3: Create the yarn-site.xml File*************************************************************************
+# Create the Directory (if it doesn't exist)
+>> mkdir -p /hadoop-2.8.2/etc/hadoop/
+
+# Create and Modify the yarn-site.xml File
+# Use the following command to create and modify the yarn-site.xml file with the necessary configurations:
+
+>>sed -i '/<configuration>/ a\
+<property>\
+  <name>yarn.scheduler.maximum-allocation-mb</name>\
+  <value>4096</value>\
+</property>\
+<property>\
+  <name>yarn.scheduler.maximum-allocation-vcores</name>\
+  <value>2</value>\
+</property>' /hadoop-2.8.2/etc/hadoop/yarn-site.xml
+
+
+# Explanation:
+# •	sed Command: This command inserts the specified properties into the <configuration> section of yarn-site.xml.
+# •	Memory and CPU Allocations: These properties ensure YARN allocates enough memory (4096 MB) and CPU cores (2) for the containers running your Hadoop jobs.
+********************************************************************************************************************
+
+
+####** Step 4: Restart YARN Services********************************************************************************
+# After creating and modifying the configuration, restart the YARN services to apply the changes.
+# Navigate to the Hadoop Installation Directory
+
+>>cd /hadoop-2.8.2
+Stop YARN Services
+>>sbin/stop-yarn.sh
+Start YARN Services
+>>sbin/start-yarn.sh
+
+# Note: If you receive any errors about services not running, you can proceed to start them.
+
+
+####*** Part 3: Prepare the Input Data
+####*** Step 5: Create a Sample Text File
+    ## Create a sample text file inside the shared volume so that it's accessible both inside and outside the container.
+
+>>echo "The quick brown fox jumps over the lazy dog" > /shared_data/sample.txt
+
+>>echo "A quick brown dog outpaces a quick fox" >> /shared_data/sample.txt
+
+>>echo "Lazy dogs are friendly but quick foxes are clever" >> /shared_data/sample.txt
+
+    ## Note: Each echo command appends a new line to sample.txt.
+
+####*** Step 6: Create an Input Directory in HDFS
+>>hdfs dfs -mkdir -p /user/student/input
+
+####*** Step 7: Upload the Sample File to HDFS
+>>hdfs dfs -put /shared_data/sample.txt /user/student/input/
+
+## Verify the upload:
+>>hdfs dfs -ls /user/student/input/
+
+####*** Part 4: Write the Python Mapper and Reducer Scripts
+####*** Step 8: Create a Directory for Scripts
+>>mkdir -p /home/hadoop/scripts
+
+####*** Step 9: Write the Mapper Script (mapper.py)
+## Use the cat command to create the mapper.py script directly.
+
+>>cat > /home/hadoop/scripts/mapper.py << 'EOF'
+#!/usr/bin/env python
+import sys
+
+for line in sys.stdin:
+    line = line.strip()
+    words = line.split()
+    for word in words:
+        print '%s\t%s' % (word, 1)
+EOF
+
+
+# Explanation:
+# •	This command writes the contents between EOF markers into /home/hadoop/scripts/mapper.py.
+# •	The 'EOF' (enclosed in single quotes) ensures that variable expansions and special characters are treated literally.
+
+
+
+####*** Step 10: Write the Reducer Script (reducer.py)
+## Use the cat command to create the reducer.py script.
+
+>>cat > /home/hadoop/scripts/reducer.py << 'EOF'
+#!/usr/bin/env python
+import sys
+
+current_word = None
+current_count = 0
+
+for line in sys.stdin:
+    line = line.strip()
+    word_count = line.split('\t', 1)
+
+    if len(word_count) != 2:
+        continue
+
+    word, count = word_count
+
+    try:
+        count = int(count)
+    except ValueError:
+        continue
+
+    if current_word == word:
+        current_count += count
+    else:
+        if current_word:
+            print '%s\t%s' % (current_word, current_count)
+        current_word = word
+        current_count = count
+
+if current_word == word:
+    print '%s\t%s' % (current_word, current_count)
+EOF
+
+
+## Explanation:
+## •  Similar to Step 9, this command writes the reducer script directly into a file.
+
+
+####*** Step 11: Make the Scripts Executable
+>>chmod +x /home/hadoop/scripts/mapper.py
+>>chmod +x /home/hadoop/scripts/reducer.py
+
+####*** Part 5: Test the Python Scripts
+####*** Step 12: Test the Mapper Script
+>>echo "The quick brown fox jumps over the lazy dog" | /home/hadoop/scripts/mapper.py
+
+####*** Step 13: Test the Reducer Script
+>>echo -e "quick\t1\nquick\t1\nfox\t1\nfox\t1\nfox\t1" | /home/hadoop/scripts/reducer.py
+
+####*** Part 6: Run the Hadoop Streaming Job
+####*** Step 14: Remove Previous Output Directory (If It Exists)
+## Hadoop won't overwrite existing directories, so ensure the output directory doesn't exist:
+>>hdfs dfs -rm -r /user/student/output
+
+## Ignore any error that says the directory doesn't exist.
+
+####*** Step 15: Submit the Hadoop Streaming Job
+
+>>hadoop jar $HADOOP_HOME/share/hadoop/tools/lib/hadoop-streaming-*.jar \
+  -input /user/student/input/sample.txt \
+  -output /user/student/output \
+  -mapper /home/hadoop/scripts/mapper.py \
+  -reducer /home/hadoop/scripts/reducer.py
+
+# Explanation:
+# •	-input: Specifies the input directory in HDFS.
+# •	-output: Specifies the output directory in HDFS.
+# •	-mapper: Points to your mapper script.
+# •	-reducer: Points to your reducer script.
+
+####*** Step 16: Monitor the Job Progress
+ ## As the job runs, you'll see logs indicating the progress. Wait until the job completes.
+
+####*** Part 7: View and Interpret the Results
+####*** Step 17: List the Output Files
+>>hdfs dfs -ls /user/student/output
+
+## Expected Output:
+## Found 2 items
+-rw-r--r--   1 hadoop supergroup          0 YYYY-MM-DD HH:MM /user/student/output/_SUCCESS
+-rw-r--r--   1 hadoop supergroup        XXX YYYY-MM-DD HH:MM /user/student/output/part-00000
+
+####*** Step 18: View the Word Count Results
+>>hdfs dfs -cat /user/student/output/part-00000
+
+# Conclusion
+# •	Set up a Hadoop environment using Docker.
+# •	Configured YARN resource allocations by creating and modifying the yarn-site.xml file using a sed command.
+# •	Written and tested Python mapper and reducer scripts using cat commands.
+# •	Performed a word count on sample text using Hadoop Streaming.
+# •	Viewed and interpreted the results of a MapReduce job.
+*********************************************************************************************************************
+

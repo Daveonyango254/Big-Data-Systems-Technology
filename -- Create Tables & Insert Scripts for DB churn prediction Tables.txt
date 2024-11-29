@@ -2,7 +2,8 @@
 
 -- Create Table churn_test
 
-CREATE OR REPLACE TABLE churn_test (
+DROP TABLE IF EXISTS churn_test;
+CREATE TABLE churn_test (
     customerID VARCHAR(50) NOT NULL PRIMARY KEY,
     Gender VARCHAR(10),
     SeniorCitizen BOOLEAN,
@@ -24,7 +25,6 @@ CREATE OR REPLACE TABLE churn_test (
     MonthlyCharges DECIMAL(10, 2),
     TotalCharges DECIMAL(10, 2)
 );
-
 
 -- Insert Statements
 INSERT INTO churn_test VALUES('0637-UBJRP', 'Male', 0, 'Yes', 'Yes', 13, 'Yes', 'No', 'Fiber optic', 'Yes', 'No', 'No', 'No', 'No', 'Yes', 'Monthly', No, 'Manual', 84.05, 1095.3);
@@ -529,7 +529,8 @@ INSERT INTO churn_test VALUES('6341-AEVKX', 'Female', 0, 'Yes', 'No', 62, 'Yes',
 INSERT INTO churn_test VALUES('4501-EQDRN', 'Female', 0, 'No', 'No', 1, 'Yes', 'No', 'Fiber optic', 'No', 'No', 'No', 'No', 'No', 'No', 'Monthly', No, 'Bank transfer (automatic)', 69.7, 69.7);
 
 
-CREATE OR REPLACE TABLE churn_train (
+DROP TABLE IF EXITS churn_train;
+CREATE TABLE churn_train (
     customerID VARCHAR(50) NOT NULL PRIMARY KEY,
     Gender VARCHAR(10),
     SeniorCitizen BOOLEAN,
